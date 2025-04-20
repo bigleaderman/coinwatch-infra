@@ -1,0 +1,39 @@
+image:
+  repository: flink
+  tag: 1.19.0
+
+jobmanager:
+  replicaCount: 1
+  service:
+    type: NodePort
+    ports:
+      rpc: 6123
+      blob: 6124
+      ui: 8081
+    nodePorts:
+      rpc: 30612
+      ui: 30081
+
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+
+taskmanager:
+  replicaCount: 1
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 500m
+    limits:
+      memory: 2Gi
+      cpu: 1
+
+serviceAccount:
+  create: true
+
+metrics:
+  enabled: true

@@ -1,0 +1,62 @@
+replicaCount: 1
+
+# Kafka 설정
+kafka:
+  image:
+    tag: 3.7.2-debian-11-r0
+  metrics:
+    enabled: true
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+  listeners:
+    client:
+      protocol: PLAINTEXT
+      port: 9092
+  service:
+    type: NodePort
+    port: 9092
+    nodePorts:
+      kafka: 30902
+
+# Zookeeper 설정
+zookeeper:
+  enabled: true
+  replicaCount: 1
+  image:
+    tag: 3.8.4-debian-11-r0
+  service:
+    type: ClusterIP
+    port: 2181
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 200m
+    limits:
+      memory: 512Mi
+      cpu: 400m
+      
+auth:
+    enabled: true
+    clientProtocol: plaintext
+    interBrokerProtocol: plaintext
+
+# 공통 리소스 설정
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+# Kafka 및 Zookeeper 메트릭 설정
+metrics:
+  kafka:
+    enabled: true
+  zookeeper:
+    enabled: true
