@@ -1,5 +1,5 @@
 image:
-  repository: flink
+  repository: bitnami/flink
   tag: 1.19.0
 
 jobmanager:

@@ -3,6 +3,7 @@ replicaCount: 1
 # Kafka 설정
 kafka:
   image:
+    repository: bitnami/kafka
     tag: 3.7.2-debian-11-r0
   metrics:
     enabled: true
@@ -39,7 +40,7 @@ zookeeper:
     limits:
       memory: 512Mi
       cpu: 400m
-      
+
 auth:
     enabled: true
     clientProtocol: plaintext
