@@ -1,0 +1,56 @@
+---
+# Kafka UI ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-ui-config
+data:
+  KAFKA_CLUSTERS_0_NAME: "local-kraft"
+  KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: "kafka-0.kafka-headless:29092"
+  KAFKA_CLUSTERS_0_METRICS_PORT: "9092"
+  DYNAMIC_CONFIG_ENABLED: "true"
+---
+# Kafka UI Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      containers:
+      - name: kafka-ui
+        image: provectuslabs/kafka-ui:latest
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: kafka-ui-config
+---
+# Kafka UI Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui
+spec:
+  type: NodePort
+  selector:
+    app: kafka-ui
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
