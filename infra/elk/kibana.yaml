@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: elk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: docker.elastic.co/kibana/kibana:7.17.0
+        ports:
+        - containerPort: 5601
+          name: http
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 512Mi
+        env:
+        - name: NODE_OPTIONS
+          value: "--max-old-space-size=512"
+        - name: ELASTICSEARCH_HOSTS
+          value: "http://elasticsearch:9200"
+        - name: SERVER_HOST
+          value: "0.0.0.0"
+        - name: XPACK_SECURITY_ENABLED
+          value: "false"
+        - name: XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY
+          value: "something_at_least_32_characters_long"
+        - name: XPACK_REPORTING_ENCRYPTIONKEY
+          value: "something_at_least_32_characters_long"
+        - name: XPACK_SECURITY_ENCRYPTIONKEY
+          value: "something_at_least_32_characters_long"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: elk
+spec:
+  selector:
+    app: kibana
+  ports:
+  - port: 5601
+    name: http
+  type: NodePort 

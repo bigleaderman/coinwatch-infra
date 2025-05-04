@@ -1,24 +1,27 @@
-
-
 # coinwatch-infra
 coinwatch application의 인프라 관련 자료들을 모아놓은 repository입니다.
 
+## 디렉토리 구조
 
-# 디렉토리 구조
-
+```
 project-root/
 ├── infra/
 │   ├── kafka.local.yaml
 │   └── kafka-ui.yaml
-├── helm/
-│   └── flink/
-│       └── values.local.yaml
+│   └── elk/
+│       ├── elasticsearch.yaml        # Elasticsearch 배포 설정
+│       ├── kibana.yaml              # Kibana 배포 설정
+│       ├── elasticsearch-pv.yaml    # Elasticsearch PV 설정
+│       ├── elasticsearch-config.yaml # Elasticsearch ConfigMap 설정
+│       ├── namespace.yaml           # ELK 네임스페이스 설정
+│       └── generate_test_data.sh    # 테스트 데이터 생성 스크립트
 ├── Makefile
 └── README.md
+```
 
 # 로컬 개발 환경 구축 가이드
 
-이 가이드는 로컬 환경에서 **Minikube**와 **Helm**을 사용하여 **Kafka**와 **Flink**를 설정하고 관리하는 방법을 설명합니다. 이 과정은 **Docker**, **Minikube**, **kubectl**, **Helm** 등이 설치되어 있는 macOS 환경을 기준으로 작성되었습니다.
+이 가이드는 로컬 환경에서 **Minikube**를 사용하여 **ELK 스택**을 설정하고 관리하는 방법을 설명합니다. 이 과정은 **Docker**, **Minikube**, **kubectl** 등이 설치되어 있는 macOS 환경을 기준으로 작성되었습니다.
 
 ## 요구 사항
 
@@ -28,33 +31,30 @@ project-root/
 - **Docker Desktop**: 로컬에서 컨테이너를 실행할 수 있는 환경
 - **Minikube**: 로컬 Kubernetes 클러스터
 - **kubectl**: Kubernetes 클러스터 관리 도구
-- **Helm**: Kubernetes용 패키지 관리 도구
 - **Make**: 빌드 자동화 도구 (macOS 기본 제공)
 
 ## 설치 순서
 
-1. **Homebrew** 설치
-2. **kubectl** 설치
-3. **Minikube** 설치 및 클러스터 시작
-4. **Docker Desktop** 설치
-5. **Helm** 설치
-6. **Kafka 설치** (Bitnami Helm 차트 사용)
-7. **Flink 설치** (Bitnami Helm 차트 사용)
-8. **클러스터 상태 확인**
+### 1. 전체 설치 (권장)
 
-## 단계별 설치
-
-### 1. Homebrew 설치
-
-Homebrew를 설치하려면 아래 명령어를 실행하세요. Homebrew는 macOS에서 패키지 관리를 쉽게 해주는 도구입니다.
+모든 도구를 설치하고 ELK 스택을 배포하려면:
 
 ```bash
-make brew
+make all
 ```
 
-### 2. kubectl 설치
+이 명령어는 다음 작업을 순차적으로 실행합니다:
+1. 모든 필수 도구 설치 (Homebrew, kubectl, Minikube, Docker)
+2. Minikube 클러스터 시작
+3. ELK 네임스페이스 생성
+4. Elasticsearch PV 배포
+5. Elasticsearch ConfigMap 배포
+6. Elasticsearch 배포
+7. Kibana 배포
+8. 테스트 데이터 생성 및 인덱싱
+9. 클러스터 상태 확인
 
-Kubernetes 클러스터를 관리할 수 있는 `kubectl`을 설치하려면 아래 명령어를 실행하세요.
+### 2. 재시작 (Minikube 재시작 후)
 
 ```bash
 make kubectl
@@ -106,17 +106,7 @@ make setup-ui
 make setup-kafka-all
 ```
 
-### 7. Flink 설치
-
-Flink는 분산 스트리밍 처리 엔진입니다. 아래 명령어를 실행하여 Flink를 설치하세요.
-
-```bash
-make flink
-```
-
-이 명령은 Bitnami Helm 차트를 사용하여 Flink를 설치합니다.
-
-### 8. 클러스터 상태 확인
+### 7. 클러스터 상태 확인
 
 Minikube 클러스터 상태를 확인하고, 현재 실행 중인 모든 Pod를 조회하려면 아래 명령어를 실행하세요.
 
@@ -320,8 +310,6 @@ minikube start --driver=docker --cpus=6 --memory=7g
 🏄  끝났습니다! kubectl이 "minikube" 클러스터와 "default" 네임스페이스를 기본적으로 사용하도록 구성되었습니다.
 ```
 
-
-
 ------
 
 ## 6. **동작 확인**
@@ -331,6 +319,118 @@ minikube start --driver=docker --cpus=6 --memory=7g
 ```bash
 minikube status
 ```
+
+이 명령어는 다음 작업을 순차적으로 실행합니다:
+1. Minikube 클러스터 시작
+2. ELK 네임스페이스 생성
+3. Elasticsearch PV 배포
+4. Elasticsearch ConfigMap 배포
+5. Elasticsearch 배포
+6. Kibana 배포
+7. 테스트 데이터 생성 및 인덱싱
+8. 클러스터 상태 확인
+
+### 3. 수동 설치 (선택적)
+
+필요한 경우 각 단계를 수동으로 실행할 수 있습니다:
+
+1. 기본 도구 설치:
+   ```bash
+   make setup
+   ```
+
+2. Minikube 클러스터 시작:
+   ```bash
+   make start
+   ```
+
+3. ELK 네임스페이스 생성:
+   ```bash
+   make deploy-namespace
+   ```
+
+4. Elasticsearch PV 배포:
+   ```bash
+   make deploy-pv
+   ```
+
+5. Elasticsearch ConfigMap 배포:
+   ```bash
+   make deploy-config
+   ```
+
+6. ELK 스택 배포:
+   ```bash
+   make deploy-elasticsearch
+   make deploy-kibana
+   ```
+
+7. 테스트 데이터 생성:
+   ```bash
+   make reindex-elasticsearch
+   ```
+
+8. Kibana 접근:
+   ```bash
+   make port-forward-kibana
+   ```
+   그 후 웹 브라우저에서 `http://localhost:5601`로 접속합니다.
+
+## 사용 가능한 명령어
+
+- `make all`: 모든 도구 설치 및 ELK 스택 배포
+- `make prepare`: Minikube 재시작 및 ELK 스택 재배포
+- `make setup`: 기본 도구 설치 (Homebrew, kubectl, Minikube, Docker)
+- `make start`: Minikube 클러스터 시작
+- `make status`: 클러스터 상태 확인
+- `make deploy-namespace`: ELK 네임스페이스 생성
+- `make deploy-pv`: Elasticsearch PV 배포
+- `make deploy-config`: Elasticsearch ConfigMap 배포
+- `make deploy-elasticsearch`: Elasticsearch 배포
+- `make deploy-kibana`: Kibana 배포
+- `make clean-namespace`: ELK 네임스페이스 정리
+- `make clean-pv`: Elasticsearch PV 정리
+- `make clean-config`: Elasticsearch ConfigMap 정리
+- `make clean-elasticsearch`: Elasticsearch 리소스 정리
+- `make clean-kibana`: Kibana 리소스 정리
+- `make reindex-elasticsearch`: 테스트 데이터 생성 및 인덱싱
+- `make port-forward-kibana`: Kibana 포트 포워딩 시작
+- `make help`: 사용 가능한 명령어 목록 표시
+
+## 문제 해결
+
+문제가 발생한 경우:
+
+1. 클러스터 상태 확인:
+   ```bash
+   make status
+   ```
+
+2. Pod 로그 확인:
+   ```bash
+   kubectl logs <pod-name> -n elk
+   ```
+
+3. Pod가 CrashLoopBackOff 상태인 경우:
+   ```bash
+   make clean-elasticsearch
+   make clean-kibana
+   make clean-pv
+   make clean-config
+   make deploy-pv
+   make deploy-config
+   make deploy-elasticsearch
+   make deploy-kibana
+   ```
+
+## 참고 사항
+
+- 이 설정은 제한된 리소스의 Minikube에 최적화되어 있습니다
+- 테스트 데이터는 실시간 암호화폐 거래 패턴을 모방하여 생성됩니다
+- Kibana는 "test-data*" 인덱스 패턴으로 구성되어 있습니다
+- Elasticsearch 데이터는 PV를 통해 영구적으로 저장됩니다
+- ConfigMap을 통해 Elasticsearch의 설정을 관리합니다
+
 
 # Branch 전략
 
