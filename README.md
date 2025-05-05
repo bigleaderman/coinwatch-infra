@@ -7,13 +7,10 @@ coinwatch application의 인프라 관련 자료들을 모아놓은 repository�
 # 디렉토리 구조
 
 project-root/
-├── infra
-│   └── Makefile/
+├── infra/
+│   ├── kafka.local.yaml
+│   └── kafka-ui.yaml
 ├── helm/
-│   ├── kafka/
-│   │   └── values.local.yaml
-│   ├── zookeeper/
-│   │   └── values.local.yaml
 │   └── flink/
 │       └── values.local.yaml
 ├── Makefile
@@ -94,15 +91,20 @@ make helm
 
 설치 후 `helm version` 명령어로 Helm 버전을 확인할 수 있습니다.
 
-### 6. Kafka 설치
+### 6. Kafka KRaft 모드 설치 (Zookeeper 없음)
 
-Kafka는 메시지 큐 시스템으로, Helm 차트를 사용하여 설치할 수 있습니다. 아래 명령어를 실행하여 Kafka와 Zookeeper를 설치하세요.
+KRaft 모드는 Zookeeper 없이 Kafka를 실행하는 방식입니다. 이 방식을 사용하려면 아래 명령어를 실행하세요.
 
 ```bash
-make kafka
-```
+# Kafka KRaft 모드 설치
+make setup-kafka
 
-이 명령은 Bitnami Helm 차트를 사용하여 Kafka와 Zookeeper를 설치합니다.
+# Kafka UI 설치 (선택사항)
+make setup-ui
+
+# 또는 한 번에 둘 다 설치
+make setup-kafka-all
+```
 
 ### 7. Flink 설치
 
@@ -122,6 +124,46 @@ Minikube 클러스터 상태를 확인하고, 현재 실행 중인 모든 Pod를
 make status
 ```
 
+## Kafka KRaft 모드 사용 가이드
+
+KRaft 모드의 Kafka는 Zookeeper 없이 더 간단하게 운영할 수 있습니다. 다음은 KRaft 모드 Kafka를 사용하는 방법입니다.
+
+### Kafka KRaft 설정 및 관리
+
+```bash
+# Kafka KRaft와 UI 모두 설치
+make setup-kafka-all
+
+# 포트 포워딩 시작
+make forward-port  # Kafka (9092)
+make forward-ui    # Kafka UI (8080)
+
+# 토픽 생성
+make create-topic
+
+# 테스트 컨슈머 시작
+make start-consumer
+
+# 삭제
+make delete-kafka      # Kafka만 삭제
+make delete-ui         # UI만 삭제
+make delete-kafka-all  # 모두 삭제
+```
+
+### Kafka UI 접속
+
+Kafka UI는 웹 브라우저를 통해 Kafka 클러스터를 관리할 수 있는 도구입니다.
+
+1. 포트 포워딩 시작:
+   ```bash
+   make forward-ui
+   ```
+
+2. 웹 브라우저에서 다음 URL 접속:
+   ```
+   http://localhost:8080
+   ```
+
 ## Makefile 설명
 
 이 `Makefile`은 로컬 환경을 자동으로 설정하고 관리하는 데 사용됩니다. 주요 타겟 및 명령어는 다음과 같습니다:
@@ -134,7 +176,12 @@ make status
 - **docker**: Docker Desktop 설치
 - **helm**: Helm 설치
 - **start**: Minikube 클러스터 시작
-- **kafka**: Kafka 및 Zookeeper 설치 (Bitnami Helm 차트 사용)
+- **setup-kafka**: Kafka KRaft 모드 설치 (Zookeeper 없음)
+- **setup-ui**: Kafka UI 설치
+- **setup-kafka-all**: Kafka KRaft와 UI 모두 설치
+- **forward-port**: Kafka 포트 포워딩 (9092)
+- **forward-ui**: Kafka UI 포트 포워딩 (8080)
+- **create-topic**: Kafka 토픽 생성
 - **flink**: Flink 설치 (Bitnami Helm 차트 사용)
 - **status**: Minikube 클러스터 상태 확인
 
@@ -167,8 +214,8 @@ make all
 
 - **Minikube와 Docker**: Minikube를 Docker 드라이버로 실행할 때 Docker Desktop이 실행 중이어야 합니다.
 - **포트 충돌**: Kafka와 Zookeeper가 사용하는 포트(예: 9092, 2181)가 다른 서비스와 충돌하지 않도록 확인하세요.
-- **리소스**: `values.yaml` 파일을 통해 Kafka, Zookeeper, Flink의 리소스를 설정할 수 있습니다. 필요에 따라 리소스를 조정
-
+- **리소스**: `values.yaml` 파일을 통해 Kafka, Zookeeper, Flink의 리소스를 설정할 수 있습니다. 필요에 따라 리소스를 조정하세요.
+- **macOS Docker 드라이버**: macOS에서 Docker 드라이버를 사용할 때는 네트워크 이슈가 발생할 수 있습니다. 이 경우 포트 포워딩을 사용하세요.
 
 
 # 자동 - 로컬환경 구성 가이드(Minikube)
@@ -184,7 +231,9 @@ make kubectl      # kubectl만 설치
 make docker       # Docker만 설치
 make helm         # helm 설치
 make start        # Minikube 클러스터 실행
-
+make setup-kafka  # Kafka KRaft 모드 설치
+make setup-ui     # Kafka UI 설치
+make forward-port # Kafka 포트 포워딩
 ```
 
 ------
@@ -193,65 +242,7 @@ make start        # Minikube 클러스터 실행
 
 - Docker Desktop 설치 후에는 수동으로 앱을 실행해줘야 합니다 (`Applications` 폴더에서 실행 또는 Spotlight).
 - Homebrew가 이미 설치되어 있다면 `make brew`는 생략해도 무방합니다.
-
-
-
-## Makefile
-
-```yaml
-.PHONY: all brew kubectl minikube docker helm kafka start status
-
-# 전체 설치 순서 실행
-all: brew kubectl minikube docker helm start kafka status
-
-# Homebrew 설치
-brew:
-	@echo "🔧 Installing Homebrew..."
-	/bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-	@echo '✅ Homebrew installation complete.'
-
-# kubectl 설치
-kubectl:
-	@echo "🔧 Installing kubectl..."
-	brew install kubectl
-	kubectl version --client
-	@echo '✅ kubectl installation complete.'
-
-# minikube 설치
-minikube:
-	@echo "🔧 Installing Minikube..."
-	brew install minikube
-	minikube version
-	@echo '✅ Minikube installation complete.'
-
-# Docker Desktop 4.26.1 설치
-docker:
-	@echo "🔧 Installing Docker Desktop version 4.26.1..."
-	brew install --cask homebrew/cask-versions/docker@4.26.1
-	@echo '⚠️  Please manually launch Docker Desktop and ensure it is running.'
-
-# Helm 설치
-helm:
-	@echo "🔧 Installing Helm..."
-	brew install helm
-	helm version
-	@echo '✅ Helm installation complete.'
-
-# Minikube 클러스터 시작
-start:
-	@echo "🚀 Starting Minikube with Docker driver..."
-	minikube start --driver=docker --cpus=4 --memory=4g
-
-# 클러스터 상태 확인
-status:
-	@echo "🔍 Checking Minikube status..."
-	minikube status
-	kubectl get pods -A
-
-```
-
-
-
+- macOS에서 포트 포워딩이 필요한 경우 `make forward-port`와 `make forward-ui`를 사용하세요.
 
 
 # 수동 - 로컬환경 구성 가이드(Minikube)
@@ -387,4 +378,3 @@ fix: 스트리밍 연결 오류 수정
 refactor: 데이터 파싱 로직 정리
 docs: README에 프로젝트 설명 추가
 ```
-
