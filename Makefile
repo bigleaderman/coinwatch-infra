@@ -1,7 +1,7 @@
 .PHONY: all setup brew kubectl minikube docker helm start status flink prepare version-check \
-        kafka-help setup-kafka delete-kafka setup-ui delete-ui setup-kafka-all delete-kafka-all create-topic \
-        start-consumer forward-port forward-ui deploy-elasticsearch deploy-kibana clean-elasticsearch clean-kibana \
-		port-forward-kibana deploy-pv deploy-config clean-pv clean-config deploy-namespace clean-namespace es-help
+        kafka-help deploy-namespace-kafka clean-namespace-kafka setup-kafka delete-kafka setup-ui delete-ui setup-kafka-all delete-kafka-all create-topic \
+        start-consumer forward-kafka forward-ui deploy-elasticsearch deploy-kibana clean-elasticsearch clean-kibana \
+		port-forward-kibana deploy-pv deploy-config clean-pv clean-config deploy-namespace-elk clean-namespace es-help
 
 # 네임스페이스 정의
 KAFKA_NS = kafka
@@ -13,10 +13,10 @@ KUBECTL_VERSION = v1.29.0
 HELM_VERSION = v3.14.0
 
 # 전체 실행
-all: setup start status setup-kafka-all deploy-namespace deploy-pv deploy-config deploy-elasticsearch deploy-kibana create-elasticsearch-index
+all: setup start status setup-kafka-all deploy-namespace-elk deploy-pv deploy-config deploy-elasticsearch deploy-kibana create-elasticsearch-index
 
 # minikube 재실행시
-prepare: start status setup-kafka-all deploy-namespace deploy-pv deploy-config deploy-elasticsearch deploy-kibana create-elasticsearch-index
+prepare: start status setup-kafka-all deploy-namespace-elk deploy-pv deploy-config deploy-elasticsearch deploy-kibana create-elasticsearch-index
 
 # 설치 관련 설정
 setup: brew kubectl minikube docker helm version-check
@@ -93,19 +93,39 @@ kafka-help:
 	@echo "make setup-kafka-all   - Kafka와 UI 모두 설치"
 	@echo "make delete-kafka-all  - Kafka와 UI 모두 삭제"
 	@echo "make create-topic      - 'upbit-btc-data' 토픽 생성"
-	@echo "make forward-port      - Kafka 포트 포워딩 시작 (9092)"
+	@echo "make forward-kafka     - Kafka 포트 포워딩 시작 (9092)"
 	@echo "make forward-ui        - Kafka UI 포트 포워딩 시작 (8080)"
 	@echo "make start-consumer    - 테스트 컨슈머 시작"
+
+# Kafka와 UI 모두 설치
+setup-kafka-all: deploy-namespace-kafka setup-kafka setup-ui setup-kafka-connect
+	@echo "=== Kafka, UI, Connector 모두 설치 완료 ==="
+
+# Kafka와 UI 모두 삭제
+delete-kafka-all: clean-namespace-kafka delete-kafka delete-ui setup-kafka-connect
+	@echo "=== Kafka, UI, Connector 모두 삭제 완료 ==="
 
 # Minikube 데이터 디렉토리 준비
 prepare-data-dir:
 	@echo "=== 데이터 디렉토리 준비 ==="
 	minikube ssh "sudo mkdir -p /data/kafka-1 && sudo chown -R 1000:1000 /data/kafka-1"
 
+# Kafka 네임스페이스 생성
+deploy-namespace-kafka:
+	@echo "📦 Creating Kafka namespace..."
+	kubectl apply -f infra/kafka/namespace.yaml
+	@echo '✅ Namespace "kafka" creation complete.'
+
+# ELK 네임스페이스 정리
+clean-namespace-kafka:
+	@echo "🧹 Cleaning up kafka namespace..."
+	kubectl delete -f infra/kafka/namespace.yaml
+	@echo '✅ Namespace "kafka" cleanup complete.'
+
 # Kafka 설치
 setup-kafka: prepare-data-dir
 	@echo "=== Kafka 설치 ==="
-	kubectl apply -f infra/kafka.local.yaml
+	kubectl apply -f infra/kafka/kafka.local.yaml
 	@echo "Kafka 파드가 준비될 때까지 기다리는 중..."
 	kubectl wait --for=condition=ready pod -l app=kafka --timeout=120s
 	@echo "Kafka가 성공적으로 설치되었습니다!"
@@ -113,13 +133,13 @@ setup-kafka: prepare-data-dir
 # Kafka 삭제
 delete-kafka:
 	@echo "=== Kafka 삭제 ==="
-	kubectl delete -f infra/kafka.local.yaml
+	kubectl delete -f infra/kafka/kafka.local.yaml
 	@echo "Kafka가 삭제되었습니다."
 
 # Kafka UI 설치
 setup-ui:
 	@echo "=== Kafka UI 설치 ==="
-	kubectl apply -f infra/kafka-ui.yaml
+	kubectl apply -f infra/kafka/kafka-ui.yaml
 	@echo "Kafka UI 파드가 준비될 때까지 기다리는 중..."
 	kubectl wait --for=condition=ready pod -l app=kafka-ui --timeout=60s
 	@echo "Kafka UI가 성공적으로 설치되었습니다!"
@@ -128,16 +148,22 @@ setup-ui:
 # Kafka UI 삭제
 delete-ui:
 	@echo "=== Kafka UI 삭제 ==="
-	kubectl delete -f infra/kafka-ui.yaml
+	kubectl delete -f infra/kafka/kafka-ui.yaml
 	@echo "Kafka UI가 삭제되었습니다."
 
-# Kafka와 UI 모두 설치
-setup-kafka-all: setup-kafka setup-ui
-	@echo "=== Kafka와 UI 모두 설치 완료 ==="
+# Kafka Connect 설치
+setup-kafka-connect:
+	@echo "=== Kafka Connect 설치 ==="
+	kubectl apply -f infra/kafka/kafka-connect.yaml
+	@echo "Kafka Connect 파드가 준비될 때까지 기다리는 중..."
+	kubectl wait --for=condition=ready pod -l app=kafka-connect -n kafka --timeout=120s
+	@echo "Kafka Connect가 성공적으로 설치되었습니다!"
 
-# Kafka와 UI 모두 삭제
-delete-kafka-all: delete-ui delete-kafka
-	@echo "=== Kafka와 UI 모두 삭제 완료 ==="
+# Kafka Connect 삭제
+delete-kafka-connect:
+	@echo "=== Kafka Connect 삭제 ==="
+	kubectl delete -f infra/kafka/kafka-connect.yaml
+	@echo "Kafka Connect가 삭제되었습니다."
 
 # 토픽 생성
 create-topic:
@@ -145,49 +171,39 @@ create-topic:
 	kubectl run kafka-client --rm -it --image=confluentinc/cp-kafka:7.7.0 --restart=Never -- kafka-topics --bootstrap-server kafka-external:9092 --create --topic upbit-btc-data --partitions 1 --replication-factor 1
 
 # Kafka 포트 포워딩 (백그라운드로 실행)
-forward-port:
+forward-kafka:
 	@echo "=== Kafka 포트 포워딩 시작 (9092) ==="
 	@echo "포트 포워딩을 중지하려면 'pkill -f \"port-forward svc/kafka-external\"' 명령어를 사용하세요."
 	nohup kubectl port-forward svc/kafka-external 9092:9092 > /dev/null 2>&1 &
-	@echo "포트 포워딩이 시작되었습니다. localhost:9092로 Kafka에 접속할 수 있습니다."
+	@echo "Kafka 포트 포워딩이 시작되었습니다."
 
 # Kafka UI 포트 포워딩 (백그라운드로 실행)
 forward-ui:
 	@echo "=== Kafka UI 포트 포워딩 시작 (8080) ==="
 	@echo "포트 포워딩을 중지하려면 'pkill -f \"port-forward svc/kafka-ui\"' 명령어를 사용하세요."
 	nohup kubectl port-forward svc/kafka-ui 8080:8080 > /dev/null 2>&1 &
-	@echo "포트 포워딩이 시작되었습니다. http://localhost:8080로 Kafka UI에 접속할 수 있습니다."
+	@echo "Kafka UI 포트 포워딩이 시작되었습니다. http://localhost:8080로 Kafka UI에 접속할 수 있습니다."
 
-# Kafka Connect 설치
-setup-kafka-connect:
-	@echo "=== Kafka Connect 설치 ==="
-	kubectl apply -f infra/kafka-connect.yaml
-	@echo "Kafka Connect 파드가 준비될 때까지 기다리는 중..."
-	kubectl wait --for=condition=ready pod -l app=kafka-connect -n elk --timeout=120s
-	@echo "Kafka Connect가 성공적으로 설치되었습니다!"
-
-# Kafka Connect 삭제
-delete-kafka-connect:
-	@echo "=== Kafka Connect 삭제 ==="
-	kubectl delete -f infra/kafka-connect.yaml
-	@echo "Kafka Connect가 삭제되었습니다."
-
-# Kafka Connect 포트 포워딩
+# Kafka Connect 포트 포워딩 (백그라운드로 실행)
 forward-kafka-connect:
 	@echo "=== Kafka Connect 포트 포워딩 시작 (8083) ==="
 	@echo "포트 포워딩을 중지하려면 'pkill -f \"port-forward svc/kafka-connect\"' 명령어를 사용하세요."
 	nohup kubectl port-forward -n kafka svc/kafka-connect 8083:8083 > /dev/null 2>&1 &
-	@echo "포트 포워딩이 시작되었습니다. http://localhost:8083로 Kafka Connect에 접속할 수 있습니다."
+	@echo "Kafka Connect 포트 포워딩이 시작되었습니다. http://localhost:8083로 Kafka Connect에 접속할 수 있습니다."
 	
 #-----------------------------------------------------------------------------
 # ELK 관련 타겟들
 #-----------------------------------------------------------------------------
 
+# ELK 모두 설치
+setup-elk-all: deploy-namespace-elk deploy-pv deploy-config deploy-elasticsearch deploy-kibana
+	@echo "=== ELK 모두 설치 완료 ==="
+
 # ELK 네임스페이스 생성
-deploy-namespace:
+deploy-namespace-elk:
 	@echo "📦 Creating ELK namespace..."
 	kubectl apply -f infra/elk/namespace.yaml
-	@echo '✅ Namespace creation complete.'
+	@echo '✅ Namespace "elk" creation complete.'
 
 # Elasticsearch PV 배포
 deploy-pv:
@@ -263,26 +279,21 @@ create-elasticsearch-index:
     }'
     @echo "인덱스가 생성되었습니다."
 
-# Elasticsearch 인덱스 생성
-create-elasticsearch-index:
-    @echo "=== Elasticsearch 범용 인덱스 생성 ==="
-    kubectl exec -it -n elk $$(kubectl get pods -n elk -l app=elasticsearch -o name | cut -d/ -f2) -- \
-    curl -X PUT "localhost:9200/upbit-btc-data" -H "Content-Type: application/json" -d'{ \
-        "settings": { \
-            "number_of_shards": 1, \
-            "number_of_replicas": 0 \
-        }, \
-        "mappings": { \
-            "dynamic": true, \
-            "date_detection": true \
-        } \
-    }'
-    @echo "인덱스가 생성되었습니다."
+# ES 포트 포워딩
+port-forward-es:
+	@echo "=== ES 포트 포워딩 시작 (9200) ==="	
+	@echo "포트 포워딩을 중지하려면 'pkill -f \"port-forward -n elk svc/elasticsearch\"' 명령어를 사용하세요."
+	@echo "🔌 Starting port forwarding for ES..."
+	nohup kubectl port-forward -n elk svc/elasticsearch 9200:9200 > /dev/null 2>&1 &
+	@echo "ES 포트 포워딩이 시작되었습니다."
 
 # Kibana 포트 포워딩
 port-forward-kibana:
+	@echo "=== Kafka 포트 포워딩 시작 (5601) ==="	
+	@echo "포트 포워딩을 중지하려면 'pkill -f \"port-forward -n elk svc/kibana\"' 명령어를 사용하세요."
 	@echo "🔌 Starting port forwarding for Kibana..."
 	nohup kubectl port-forward -n elk svc/kibana 5601:5601 > /dev/null 2>&1 &
+	@echo "Kibana 포트 포워딩이 시작되었습니다. localhost:5601 Kafka에 접속할 수 있습니다."
 
 # Help command
 es-help:
@@ -292,7 +303,7 @@ es-help:
 	@echo "  make setup      - Install all required tools"
 	@echo "  make start      - Start Minikube cluster"
 	@echo "  make status     - Check cluster status"
-	@echo "  make deploy-namespace    - Create ELK namespace"
+	@echo "  make deploy-namespace-elk    - Create ELK namespace"
 	@echo "  make deploy-pv          - Deploy Elasticsearch PV"
 	@echo "  make deploy-config      - Deploy Elasticsearch ConfigMap"
 	@echo "  make deploy-elasticsearch - Deploy Elasticsearch"
@@ -302,4 +313,5 @@ es-help:
 	@echo "  make clean-config      - Clean up Elasticsearch ConfigMap"
 	@echo "  make clean-elasticsearch - Clean up Elasticsearch"
 	@echo "  make clean-kibana       - Clean up Kibana"
+	@echo "  make port-forward-es   - Start port forwarding for ES"
 	@echo "  make port-forward-kibana   - Start port forwarding for Kibana"
