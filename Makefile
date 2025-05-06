@@ -263,6 +263,22 @@ create-elasticsearch-index:
     }'
     @echo "인덱스가 생성되었습니다."
 
+# Elasticsearch 인덱스 생성
+create-elasticsearch-index:
+    @echo "=== Elasticsearch 범용 인덱스 생성 ==="
+    kubectl exec -it -n elk $$(kubectl get pods -n elk -l app=elasticsearch -o name | cut -d/ -f2) -- \
+    curl -X PUT "localhost:9200/upbit-btc-data" -H "Content-Type: application/json" -d'{ \
+        "settings": { \
+            "number_of_shards": 1, \
+            "number_of_replicas": 0 \
+        }, \
+        "mappings": { \
+            "dynamic": true, \
+            "date_detection": true \
+        } \
+    }'
+    @echo "인덱스가 생성되었습니다."
+
 # Kibana 포트 포워딩
 port-forward-kibana:
 	@echo "🔌 Starting port forwarding for Kibana..."
