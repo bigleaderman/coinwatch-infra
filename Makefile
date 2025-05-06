@@ -1,5 +1,6 @@
 .PHONY: all setup brew kubectl minikube docker helm start status flink prepare version-check \
-        kafka-help deploy-namespace-kafka clean-namespace-kafka setup-kafka delete-kafka setup-ui delete-ui setup-kafka-all delete-kafka-all create-topic \
+        kafka-help deploy-namespace-kafka clean-namespace-kafka setup-kafka delete-kafka setup-ui delete-ui \
+		setup-kafka-all delete-kafka-all create-topic create-es-sink-connector delete-es-sink-connector \
         start-consumer forward-kafka forward-ui deploy-elasticsearch deploy-kibana clean-elasticsearch clean-kibana \
 		port-forward-kibana deploy-pv deploy-config clean-pv clean-config deploy-namespace-elk clean-namespace es-help
 
@@ -127,7 +128,7 @@ setup-kafka: prepare-data-dir
 	@echo "=== Kafka 설치 ==="
 	kubectl apply -f infra/kafka/kafka.local.yaml
 	@echo "Kafka 파드가 준비될 때까지 기다리는 중..."
-	kubectl wait --for=condition=ready pod -l app=kafka --timeout=120s
+	kubectl wait --for=condition=ready pod -l app=kafka -n kafka --timeout=120s
 	@echo "Kafka가 성공적으로 설치되었습니다!"
 
 # Kafka 삭제
@@ -141,7 +142,7 @@ setup-ui:
 	@echo "=== Kafka UI 설치 ==="
 	kubectl apply -f infra/kafka/kafka-ui.yaml
 	@echo "Kafka UI 파드가 준비될 때까지 기다리는 중..."
-	kubectl wait --for=condition=ready pod -l app=kafka-ui --timeout=60s
+	kubectl wait --for=condition=ready pod -l app=kafka-ui -n kafka --timeout=60s
 	@echo "Kafka UI가 성공적으로 설치되었습니다!"
 	@echo "접속 URL: http://localhost:8080 (포트 포워딩 필요)"
 
@@ -168,20 +169,20 @@ delete-kafka-connect:
 # 토픽 생성
 create-topic:
 	@echo "=== 'upbit-btc-data' 토픽 생성 ==="
-	kubectl run kafka-client --rm -it --image=confluentinc/cp-kafka:7.7.0 --restart=Never -- kafka-topics --bootstrap-server kafka-external:9092 --create --topic upbit-btc-data --partitions 1 --replication-factor 1
+	kubectl run kafka-client --rm -it --image=confluentinc/cp-kafka:7.7.0 --restart=Never -- kafka-topics --bootstrap-server kafka-external:9092 --create --topic test-btc-data --partitions 1 --replication-factor 1
 
 # Kafka 포트 포워딩 (백그라운드로 실행)
 forward-kafka:
 	@echo "=== Kafka 포트 포워딩 시작 (9092) ==="
 	@echo "포트 포워딩을 중지하려면 'pkill -f \"port-forward svc/kafka-external\"' 명령어를 사용하세요."
-	nohup kubectl port-forward svc/kafka-external 9092:9092 > /dev/null 2>&1 &
+	nohup kubectl port-forward -n kafka svc/kafka-external 9092:9092 > /dev/null 2>&1 &
 	@echo "Kafka 포트 포워딩이 시작되었습니다."
 
 # Kafka UI 포트 포워딩 (백그라운드로 실행)
 forward-ui:
 	@echo "=== Kafka UI 포트 포워딩 시작 (8080) ==="
 	@echo "포트 포워딩을 중지하려면 'pkill -f \"port-forward svc/kafka-ui\"' 명령어를 사용하세요."
-	nohup kubectl port-forward svc/kafka-ui 8080:8080 > /dev/null 2>&1 &
+	nohup kubectl port-forward -n kafka svc/kafka-ui 8080:8080 > /dev/null 2>&1 &
 	@echo "Kafka UI 포트 포워딩이 시작되었습니다. http://localhost:8080로 Kafka UI에 접속할 수 있습니다."
 
 # Kafka Connect 포트 포워딩 (백그라운드로 실행)
@@ -190,7 +191,19 @@ forward-kafka-connect:
 	@echo "포트 포워딩을 중지하려면 'pkill -f \"port-forward svc/kafka-connect\"' 명령어를 사용하세요."
 	nohup kubectl port-forward -n kafka svc/kafka-connect 8083:8083 > /dev/null 2>&1 &
 	@echo "Kafka Connect 포트 포워딩이 시작되었습니다. http://localhost:8083로 Kafka Connect에 접속할 수 있습니다."
-	
+
+# Kafka Connector (es sink 생성)
+create-es-sink-connector:
+	@echo "=== ES Sink Connector를 생성합니다. (Kafka Connect 포트 포워딩 필요!) ==="
+	curl -X POST -H "Content-Type: application/json" --data @./infra/kafka/es-sink-connector.json http://localhost:8083/connectors
+	@echo "=== ES Sink Connector 생성 완료되었습니다. ==="
+
+# Kafka Connector (es sink 생성)
+delete-es-sink-connector:
+	@echo "=== ES Sink Connector를 제거합니다. (Kafka Connect 포트 포워딩 필요!) ==="
+	curl  -X DELETE http://localhost:8083/connectors/elasticsearch-sink
+	@echo "=== ES Sink Connector 제거 완료되었습니다. ==="
+
 #-----------------------------------------------------------------------------
 # ELK 관련 타겟들
 #-----------------------------------------------------------------------------
@@ -265,8 +278,8 @@ clean-kibana:
 
 # Elasticsearch 인덱스 생성
 create-elasticsearch-index:
-    @echo "=== Elasticsearch 범용 인덱스 생성 ==="
-    kubectl exec -it -n elk $$(kubectl get pods -n elk -l app=elasticsearch -o name | cut -d/ -f2) -- \
+	@echo "=== Elasticsearch 범용 인덱스 생성 ==="
+	kubectl exec -it -n elk $$(kubectl get pods -n elk -l app=elasticsearch -o name | cut -d/ -f2) -- \
     curl -X PUT "localhost:9200/upbit-btc-data" -H "Content-Type: application/json" -d'{ \
         "settings": { \
             "number_of_shards": 1, \
@@ -277,7 +290,7 @@ create-elasticsearch-index:
             "date_detection": true \
         } \
     }'
-    @echo "인덱스가 생성되었습니다."
+	@echo "인덱스가 생성되었습니다."
 
 # ES 포트 포워딩
 port-forward-es:
