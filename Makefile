@@ -165,3 +165,25 @@ forward-ui:
 	@echo "포트 포워딩을 중지하려면 'pkill -f \"port-forward svc/kafka-ui\"' 명령어를 사용하세요."
 	nohup kubectl port-forward svc/kafka-ui 8080:8080 > /dev/null 2>&1 &
 	@echo "포트 포워딩이 시작되었습니다. http://localhost:8080로 Kafka UI에 접속할 수 있습니다."
+
+# Kafka Connect 설치
+setup-kafka-connect:
+	@echo "=== Kafka Connect 설치 ==="
+	kubectl apply -f infra/kafka-connect.yaml
+	@echo "Kafka Connect 파드가 준비될 때까지 기다리는 중..."
+	kubectl wait --for=condition=ready pod -l app=kafka-connect -n elk --timeout=120s
+	@echo "Kafka Connect가 성공적으로 설치되었습니다!"
+
+# Kafka Connect 삭제
+delete-kafka-connect:
+	@echo "=== Kafka Connect 삭제 ==="
+	kubectl delete -f infra/kafka-connect.yaml
+	@echo "Kafka Connect가 삭제되었습니다."
+
+# Kafka Connect 포트 포워딩
+forward-kafka-connect:
+	@echo "=== Kafka Connect 포트 포워딩 시작 (8083) ==="
+	@echo "포트 포워딩을 중지하려면 'pkill -f \"port-forward svc/kafka-connect\"' 명령어를 사용하세요."
+	nohup kubectl port-forward -n kafka svc/kafka-connect 8083:8083 > /dev/null 2>&1 &
+	@echo "포트 포워딩이 시작되었습니다. http://localhost:8083로 Kafka Connect에 접속할 수 있습니다."
+	
