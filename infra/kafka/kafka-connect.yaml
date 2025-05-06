@@ -55,7 +55,7 @@ spec:
         env:
         # --- 환경 변수는 이전과 동일 ---
         - name: CONNECT_BOOTSTRAP_SERVERS
-          value: "kafka-0.kafka-headless.default.svc.cluster.local:29092"
+          value: "kafka-0.kafka-headless.kafka.svc.cluster.local:29092"
         - name: CONNECT_REST_PORT
           value: "8083"
         - name: CONNECT_GROUP_ID
