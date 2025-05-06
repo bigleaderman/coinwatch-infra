@@ -1,0 +1,133 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-connect-config
+  namespace: kafka
+data:
+  # connect-distributed.properties 내용만 남깁니다.
+  connect-distributed.properties: |
+    bootstrap.servers=kafka-0.kafka-headless:29092
+    group.id=connect-cluster
+    key.converter=org.apache.kafka.connect.json.JsonConverter
+    value.converter=org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable=false
+    value.converter.schemas.enable=false
+    offset.storage.topic=connect-offsets
+    offset.storage.replication.factor=1
+    config.storage.topic=connect-configs
+    config.storage.replication.factor=1
+    status.storage.topic=connect-status
+    status.storage.replication.factor=1
+    plugin.path=/usr/share/java,/usr/share/confluent-hub-components
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-connect
+  namespace: kafka
+  labels:
+    app: kafka-connect
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-connect
+  template:
+    metadata:
+      labels:
+        app: kafka-connect
+    spec:
+      initContainers:
+      - name: install-plugins
+        image: confluentinc/cp-kafka-connect:7.7.0
+        command:
+        - sh
+        - -c
+        - |
+          confluent-hub install --no-prompt confluentinc/kafka-connect-elasticsearch:14.0.6
+        volumeMounts:
+        - name: plugins
+          mountPath: /usr/share/confluent-hub-components
+      containers:
+      - name: kafka-connect
+        image: confluentinc/cp-kafka-connect:7.7.0
+        env:
+        # --- 환경 변수는 이전과 동일 ---
+        - name: CONNECT_BOOTSTRAP_SERVERS
+          value: "kafka-0.kafka-headless.default.svc.cluster.local:29092"
+        - name: CONNECT_REST_PORT
+          value: "8083"
+        - name: CONNECT_GROUP_ID
+          value: "connect-cluster"
+        - name: CONNECT_CONFIG_STORAGE_TOPIC
+          value: "connect-configs"
+        - name: CONNECT_OFFSET_STORAGE_TOPIC
+          value: "connect-offsets"
+        - name: CONNECT_STATUS_STORAGE_TOPIC
+          value: "connect-status"
+        - name: CONNECT_KEY_CONVERTER
+          value: "org.apache.kafka.connect.storage.StringConverter"
+        - name: CONNECT_VALUE_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        # - name: CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE
+        #   value: "false"
+        - name: CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE
+          value: "false"
+        - name: CONNECT_INTERNAL_KEY_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: CONNECT_INTERNAL_VALUE_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: CONNECT_REST_ADVERTISED_HOST_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: CONNECT_PLUGIN_PATH
+          value: "/usr/share/java,/usr/share/confluent-hub-components"
+        - name: CONNECT_LOG4J_ROOT_LOGLEVEL
+          value: "INFO"
+        - name: CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR
+          value: "1"
+        - name: CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR
+          value: "1"
+        - name: CONNECT_STATUS_STORAGE_REPLICATION_FACTOR
+          value: "1"
+        ports:
+        - containerPort: 8083
+          name: http
+        volumeMounts:
+        - name: plugins
+          mountPath: /usr/share/confluent-hub-components
+        # --- volumeMounts 수정 ---
+        # /etc/kafka-connect 디렉토리 전체가 아닌, 필요한 파일만 마운트합니다.
+        - name: config
+          # Kafka Connect가 읽을 설정 파일의 전체 경로
+          mountPath: /etc/kafka-connect/connect-distributed.properties
+          # ConfigMap의 'connect-distributed.properties' 키에 해당하는 내용을 이 파일로 마운트
+          subPath: connect-distributed.properties
+      volumes:
+      - name: plugins
+        emptyDir: {}
+      # --- volumes 수정 (items 추가는 명시성을 위함, 필수는 아님) ---
+      - name: config
+        configMap:
+          name: kafka-connect-config
+          # subPath를 사용할 때 어떤 키를 마운트할지 명시적으로 지정 (권장)
+          items:
+          - key: connect-distributed.properties
+            path: connect-distributed.properties # subPath에서 사용할 이름과 동일하게 지정
+
+---
+# Service 부분은 변경 없음
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-connect
+  namespace: kafka
+spec:
+  selector:
+    app: kafka-connect
+  ports:
+  - port: 8083
+    name: http
+  type: ClusterIP
