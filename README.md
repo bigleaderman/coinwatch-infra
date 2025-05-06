@@ -91,7 +91,7 @@ make helm
 
 설치 후 `helm version` 명령어로 Helm 버전을 확인할 수 있습니다.
 
-### 6. Kafka KRaft 모드 설치 (Zookeeper 없음)
+### 6. Kafka 환경 구성 (KRaft 모드 설치 (Zookeeper 없음))
 
 KRaft 모드는 Zookeeper 없이 Kafka를 실행하는 방식입니다. 이 방식을 사용하려면 아래 명령어를 실행하세요.
 
@@ -99,45 +99,40 @@ KRaft 모드는 Zookeeper 없이 Kafka를 실행하는 방식입니다. 이 방�
 # Kafka KRaft 모드 설치
 make setup-kafka
 
-# Kafka UI 설치 (선택사항)
+# Kafka UI 설치
 make setup-ui
+
+# Kafka Connect 설치
+make setup-kafka-connect
 
 # 또는 한 번에 둘 다 설치
 make setup-kafka-all
 ```
 
-### 7. 클러스터 상태 확인
-
-Minikube 클러스터 상태를 확인하고, 현재 실행 중인 모든 Pod를 조회하려면 아래 명령어를 실행하세요.
+Kafka Cluster 통신 환경을 구축하는 방법입니다.
 
 ```bash
-make status
+# 포트 포워딩 시작
+make forward-kafka         # Kafka (9092) 
+make forward-ui            # Kafka UI (8080)
+make forward-kafka-connect # Kafka Connector (8083)
 ```
 
-## Kafka KRaft 모드 사용 가이드
-
-KRaft 모드의 Kafka는 Zookeeper 없이 더 간단하게 운영할 수 있습니다. 다음은 KRaft 모드 Kafka를 사용하는 방법입니다.
-
-### Kafka KRaft 설정 및 관리
+Kafka Topic 을 생성하는 방법입니다.
 
 ```bash
-# Kafka KRaft와 UI 모두 설치
-make setup-kafka-all
-
-# 포트 포워딩 시작
-make forward-port  # Kafka (9092)
-make forward-ui    # Kafka UI (8080)
-
 # 토픽 생성
 make create-topic
+```
 
-# 테스트 컨슈머 시작
-make start-consumer
+Kafka Cluster 를 모두 제거하는 방법입니다.
 
+```bash
 # 삭제
-make delete-kafka      # Kafka만 삭제
-make delete-ui         # UI만 삭제
-make delete-kafka-all  # 모두 삭제
+make delete-kafka          # Kafka만 삭제
+make delete-ui             # UI만 삭제
+make delete-kafka-connect  # Connect만 삭제
+make delete-kafka-all      # 모두 삭제
 ```
 
 ### Kafka UI 접속

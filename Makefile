@@ -169,7 +169,7 @@ delete-kafka-connect:
 # 토픽 생성
 create-topic:
 	@echo "=== 'upbit-btc-data' 토픽 생성 ==="
-	kubectl run kafka-client --rm -it --image=confluentinc/cp-kafka:7.7.0 --restart=Never -- kafka-topics --bootstrap-server kafka-external:9092 --create --topic test-btc-data --partitions 1 --replication-factor 1
+	kubectl exec -it -n kafka kafka-0 -- kafka-topics --bootstrap-server kafka-external:9092 --create --topic upbit-btc-data --partitions 1 --replication-factor 1
 
 # Kafka 포트 포워딩 (백그라운드로 실행)
 forward-kafka:
