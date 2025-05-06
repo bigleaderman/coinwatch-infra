@@ -1,10 +1,11 @@
 .PHONY: all setup brew kubectl minikube docker helm start status flink prepare version-check \
         kafka-help setup-kafka delete-kafka setup-ui delete-ui setup-kafka-all delete-kafka-all create-topic \
-        start-consumer forward-port forward-ui
+        start-consumer forward-port forward-ui deploy-elasticsearch deploy-kibana clean-elasticsearch clean-kibana \
+		port-forward-kibana deploy-pv deploy-config clean-pv clean-config deploy-namespace clean-namespace es-help
 
 # 네임스페이스 정의
 KAFKA_NS = kafka
-FLINK_NS = flink
+ELK_NS = elk
 
 # 원하는 버전
 MINIKUBE_VERSION = v1.32.0
@@ -12,10 +13,10 @@ KUBECTL_VERSION = v1.29.0
 HELM_VERSION = v3.14.0
 
 # 전체 실행
-all: setup start setup-kafka-all status flink
+all: setup start status setup-kafka-all deploy-namespace deploy-pv deploy-config deploy-elasticsearch deploy-kibana create-elasticsearch-index
 
 # minikube 재실행시
-prepare: start setup-kafka-all status flink
+prepare: start status setup-kafka-all deploy-namespace deploy-pv deploy-config deploy-elasticsearch deploy-kibana create-elasticsearch-index
 
 # 설치 관련 설정
 setup: brew kubectl minikube docker helm version-check
@@ -77,15 +78,6 @@ status:
 	@echo "🔍 Checking cluster status..."
 	minikube status
 	kubectl get pods -A
-
-# Flink 설치
-flink:
-	@echo "📦 Deploying Flink..."
-	helm repo add flink https://charts.bitnami.com/bitnami
-	helm repo update
-	helm upgrade --install my-flink bitnami/flink \
-	  --namespace $(FLINK_NS) --create-namespace \
-	  -f helm/flink/values.local.yaml
 
 #-----------------------------------------------------------------------------
 # Kafka KRaft 관련 타겟들
@@ -187,3 +179,127 @@ forward-kafka-connect:
 	nohup kubectl port-forward -n kafka svc/kafka-connect 8083:8083 > /dev/null 2>&1 &
 	@echo "포트 포워딩이 시작되었습니다. http://localhost:8083로 Kafka Connect에 접속할 수 있습니다."
 	
+#-----------------------------------------------------------------------------
+# ELK 관련 타겟들
+#-----------------------------------------------------------------------------
+
+# ELK 네임스페이스 생성
+deploy-namespace:
+	@echo "📦 Creating ELK namespace..."
+	kubectl apply -f infra/elk/namespace.yaml
+	@echo '✅ Namespace creation complete.'
+
+# Elasticsearch PV 배포
+deploy-pv:
+	@echo "💾 Deploying Elasticsearch PV..."
+	kubectl apply -f infra/elk/elasticsearch-pv.yaml
+	@echo '✅ PV deployment complete.'
+
+# Elasticsearch ConfigMap 배포
+deploy-config:
+	@echo "⚙️ Deploying Elasticsearch ConfigMap..."
+	kubectl apply -f infra/elk/elasticsearch-config.yaml
+	@echo '✅ ConfigMap deployment complete.'
+
+# Elasticsearch 배포
+deploy-elasticsearch:
+	@echo "🔧 Deploying Elasticsearch..."
+	kubectl apply -f infra/elk/elasticsearch.yaml
+	@echo "⏳ Waiting for Elasticsearch to be ready..."
+	kubectl wait --for=condition=ready pod -l app=elasticsearch --timeout=300s
+	@echo '✅ Elasticsearch deployment complete.'
+
+# Kibana 배포
+deploy-kibana:
+	@echo "🔧 Deploying Kibana..."
+	kubectl apply -f infra/elk/kibana.yaml
+	@echo "⏳ Waiting for Kibana to be ready..."
+	kubectl wait --for=condition=ready pod -l app=kibana --timeout=300s
+	@echo '✅ Kibana deployment complete.'
+
+# ELK 네임스페이스 정리
+clean-namespace:
+	@echo "🧹 Cleaning up ELK namespace..."
+	kubectl delete -f infra/elk/namespace.yaml
+	@echo '✅ Namespace cleanup complete.'
+
+# Elasticsearch PV 정리
+clean-pv:
+	@echo "🧹 Cleaning up Elasticsearch PV..."
+	kubectl delete -f infra/elk/elasticsearch-pv.yaml
+	@echo '✅ PV cleanup complete.'
+
+# Elasticsearch ConfigMap 정리
+clean-config:
+	@echo "🧹 Cleaning up Elasticsearch ConfigMap..."
+	kubectl delete -f infra/elk/elasticsearch-config.yaml
+	@echo '✅ ConfigMap cleanup complete.'
+
+# Elasticsearch 리소스 정리
+clean-elasticsearch:
+	@echo "🧹 Cleaning up Elasticsearch resources..."
+	kubectl delete -f infra/elk/elasticsearch.yaml
+	@echo '✅ Elasticsearch cleanup complete.'
+
+# Kibana 리소스 정리
+clean-kibana:
+	@echo "🧹 Cleaning up Kibana resources..."
+	kubectl delete -f infra/elk/kibana.yaml
+	@echo '✅ Kibana cleanup complete.'
+
+# Elasticsearch 인덱스 생성
+create-elasticsearch-index:
+    @echo "=== Elasticsearch 범용 인덱스 생성 ==="
+    kubectl exec -it -n elk $$(kubectl get pods -n elk -l app=elasticsearch -o name | cut -d/ -f2) -- \
+    curl -X PUT "localhost:9200/upbit-btc-data" -H "Content-Type: application/json" -d'{ \
+        "settings": { \
+            "number_of_shards": 1, \
+            "number_of_replicas": 0 \
+        }, \
+        "mappings": { \
+            "dynamic": true, \
+            "date_detection": true \
+        } \
+    }'
+    @echo "인덱스가 생성되었습니다."
+
+# Elasticsearch 인덱스 생성
+create-elasticsearch-index:
+    @echo "=== Elasticsearch 범용 인덱스 생성 ==="
+    kubectl exec -it -n elk $$(kubectl get pods -n elk -l app=elasticsearch -o name | cut -d/ -f2) -- \
+    curl -X PUT "localhost:9200/upbit-btc-data" -H "Content-Type: application/json" -d'{ \
+        "settings": { \
+            "number_of_shards": 1, \
+            "number_of_replicas": 0 \
+        }, \
+        "mappings": { \
+            "dynamic": true, \
+            "date_detection": true \
+        } \
+    }'
+    @echo "인덱스가 생성되었습니다."
+
+# Kibana 포트 포워딩
+port-forward-kibana:
+	@echo "🔌 Starting port forwarding for Kibana..."
+	nohup kubectl port-forward -n elk svc/kibana 5601:5601 > /dev/null 2>&1 &
+
+# Help command
+es-help:
+	@echo "Available commands:"
+	@echo "  make all        - Install all tools and deploy ELK stack"
+	@echo "  make prepare    - Restart Minikube and redeploy ELK stack"
+	@echo "  make setup      - Install all required tools"
+	@echo "  make start      - Start Minikube cluster"
+	@echo "  make status     - Check cluster status"
+	@echo "  make deploy-namespace    - Create ELK namespace"
+	@echo "  make deploy-pv          - Deploy Elasticsearch PV"
+	@echo "  make deploy-config      - Deploy Elasticsearch ConfigMap"
+	@echo "  make deploy-elasticsearch - Deploy Elasticsearch"
+	@echo "  make deploy-kibana       - Deploy Kibana"
+	@echo "  make clean-namespace    - Clean up ELK namespace"
+	@echo "  make clean-pv          - Clean up Elasticsearch PV"
+	@echo "  make clean-config      - Clean up Elasticsearch ConfigMap"
+	@echo "  make clean-elasticsearch - Clean up Elasticsearch"
+	@echo "  make clean-kibana       - Clean up Kibana"
+	@echo "  make port-forward-kibana   - Start port forwarding for Kibana"

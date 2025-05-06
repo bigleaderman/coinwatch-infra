@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: elasticsearch-config
+  namespace: elk
+data:
+  elasticsearch.yml: |
+    cluster.name: "docker-cluster"
+    network.host: 0.0.0.0
+    discovery.type: single-node
+    bootstrap.memory_lock: false
+    http.cors.enabled: true
+    http.cors.allow-origin: "*"
+    xpack.security.enabled: false 
